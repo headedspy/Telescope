@@ -64,8 +64,8 @@ float hic_x, hic_y;
 
 Servo servo;
 
-const char* ssid = "VIVACOM_AAF7";
-const char* password = "nQhrwXce6Wh4";
+const char* ssid = "az";
+const char* password = "gonoreq7";
 
 // set web server port number to 80
 WiFiServer server(80);
@@ -231,6 +231,11 @@ void rotateStepper(float targetDeg)
 
     stepper.stop();
     stepper.disableOutputs();
+
+    digitalWrite(STEPPER_OUTPUT1, LOW);
+    digitalWrite(STEPPER_OUTPUT2, LOW);
+    digitalWrite(STEPPER_OUTPUT3, LOW);
+    digitalWrite(STEPPER_OUTPUT4, LOW);
     
     // delay to let the sensor settle before the next check
     delay(200); 
@@ -360,6 +365,11 @@ void setup()
   pinMode(STEPPER_OUTPUT2, OUTPUT);
   pinMode(STEPPER_OUTPUT3, OUTPUT);
   pinMode(STEPPER_OUTPUT4, OUTPUT);
+  
+  digitalWrite(STEPPER_OUTPUT1, LOW);
+  digitalWrite(STEPPER_OUTPUT2, LOW);
+  digitalWrite(STEPPER_OUTPUT3, LOW);
+  digitalWrite(STEPPER_OUTPUT4, LOW);
 
 
   servo.attach(4, 500, 2500);
@@ -393,23 +403,33 @@ void setup()
   rotateServo(alt);
 }
 
+
 void loop() {
   float heading = getHeading();
   displayHeading(heading);
-  delay(10);
+  delay(100);
+
+  int pendingStepperAngle = -999; 
+  int pendingServoAngle = -999;
 
   WiFiClient client = server.available();
+  if (!client || !client.connected()) {
+    delay(10); 
+    return; 
+  }
 
   if (client) {
     Serial.println("New Client.");
+    unsigned long timeout = millis();
     // incoming data from the client
     String currentLine = "";
 
-    while (client.connected()) {
+    while (client.connected() && millis() - timeout < 2000) {
 
       // read if there's bytes to read from the client
       if (client.available()) {
         char c = client.read();
+        timeout = millis();
         Serial.write(c);
         http_request += c;
         
@@ -426,12 +446,10 @@ void loop() {
               calibrateCompass();
             }
             else if (http_request.indexOf("GET /rotateServo?angle=") >= 0) {
-              alt = extractAngle(http_request);
-              rotateServo(alt);
+              pendingServoAngle = extractAngle(http_request);
             }
             else if (http_request.indexOf("GET /rotateStepper?angle=") >= 0) {
-              int angle = extractAngle(http_request);
-              rotateStepper(angle);
+              pendingStepperAngle = extractAngle(http_request);
             }
 
             String date = String(t_year) + "-" + (t_month <= 9 ? "0" : "") + String(t_month) + "-" + (t_day <= 9 ? "0" : "") +String(t_day);
@@ -565,11 +583,11 @@ void loop() {
                             <div class="controls-row">
                                 <div class="control-group">
                                     <input type="range" id="servo" min="-30" max="60" value="0" oninput="document.getElementById('servoVal').innerText = this.value; updateServoValue(this.value);">
-                                    <div class="control-label">Servo: <span id="servoVal">0</span>°</div>
+                                    <div class="control-label">Altitude: <span id="servoVal">0</span>°</div>
                                 </div>
                                 <div class="control-group">
                                     <input type="range" id="stepper" min="0" max="360" value="0" oninput="document.getElementById('stepperVal').innerText = this.value; updateStepperValue(this.value);">
-                                    <div class="control-label">Stepper: <span id="stepperVal">0</span>°</div>
+                                    <div class="control-label">Azimuth: <span id="stepperVal">0</span>°</div>
                                 </div>
                             </div>
                             <br>
@@ -635,14 +653,18 @@ void loop() {
                             } catch (err) {}
                         }
                     };
-                    xhr.open('GET', 'https://api.astronomyapi.com/api/v2/bodies/positions?longitude=23.32&latitude=42.69&elevation=1&from_date=2024-01-01&to_date=2024-01-01&time=00:00:00');
+                    )=====");
+            
+            client.println("xhr.open('GET','https://api.astronomyapi.com/api/v2/bodies/positions?longitude=-84.39733&latitude=33.775867&elevation=1&from_date=" + date + "&to_date=" + date + "&time=" + time + "');");
+
+            client.println(R"=====(
                     xhr.setRequestHeader('Authorization', 'Basic NzU1MWFkOTItMWFlZC00OGZkLWFjOTgtMmY3ODA0ZmNlYjJkOmQ4MDg5MWY3MDU4YmI3ZWFkYzIzY2QzNWZhNzg0YWVmNDZmNmIzNTgwMjNkYzIwYTBjODU1MzljMTY5NzcxM2U5ZTFmZGJjM2RkMmFkMmY2OWE3YzM4MTM4NDFiNTE4YjMxN2VlNDc5ZDAxNzJmZTVlMzlhN2M1NzEwZTQyZWI0NGMzYzBkODRiMWZkMmNhY2RhYzBkZjhiMWZhZmMwNjEzOWEwNGExZDA0NWVkZTI3NTVlYTFmZDI4ZWZmMzZkOTUxYTM0MzVkMDA1YzE2N2QxZTg5MGVkMTFjMjkwY2Ey');
                     xhr.send();
                 }
                 let currentServoValue = 0;
                 let currentStepperValue = 0;
-                function updateServoValue(v) { currentServoValue = v; document.getElementById('servoVal').innerHTML = v; }
-                function updateStepperValue(v) { currentStepperValue = v; document.getElementById('stepperVal').innerHTML = v; }
+                function updateServoValue(v) { currentServoValue = v; document.getElementById('servoVal').innerHTML = v; document.getElementById('servo').value = v; }
+                function updateStepperValue(v) { currentStepperValue = v; document.getElementById('stepperVal').innerHTML = v; document.getElementById('stepper').value = v; }
                 function sendServoAngle() { fetch('/rotateServo?angle=' + currentServoValue).catch(() => {}); }
                 function sendStepperAngle() { fetch('/rotateStepper?angle=' + currentStepperValue).catch(() => {}); }
                 </script>
@@ -667,5 +689,18 @@ void loop() {
     client.stop();
     Serial.println("Client disconnected.");
     Serial.println("");
+  }
+
+  if (pendingServoAngle != -999) {
+    alt = (float)pendingServoAngle; // Update global alt for display
+    rotateServo(pendingServoAngle);
+    pendingServoAngle = -999;
+    return;
+  }
+
+  if (pendingStepperAngle != -999) {
+    rotateStepper((float)pendingStepperAngle);
+    pendingStepperAngle = -999;
+    return;
   }
 }
